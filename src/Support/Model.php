@@ -27,10 +27,12 @@ use Spinen\ClickUp\Support\Relations\ChildOf;
 use Spinen\ClickUp\Support\Relations\HasMany;
 use Spinen\ClickUp\Support\Relations\Relation;
 
+use Illuminate\Database\Eloquent\Model as EloquentModel;
+
 /**
  * Class Model
  */
-abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializable
+abstract class Model extends EloquentModel implements Arrayable, ArrayAccess, Jsonable, JsonSerializable
 {
     use HasAttributes {
         asDateTime as originalAsDateTime;
@@ -40,17 +42,24 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
     /**
      * Indicates if the model exists.
      */
-    public bool $exists = false;
+    public $exists = false;
+
+    /**
+     * Indicates if the model was inserted during the current request lifecycle.
+     *
+     * @var bool
+     */
+    public $wasRecentlyCreated = false;
 
     /**
      * Indicates if the IDs are auto-incrementing.
      */
-    public bool $incrementing = false;
+    public $incrementing = false;
 
     /**
      * The "type" of the primary key ID.
      */
-    protected string $keyType = 'int';
+    protected $keyType = 'int';
 
     /**
      * Is resource nested behind parentModel
@@ -74,7 +83,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
     /**
      * The primary key for the model.
      */
-    protected string $primaryKey = 'id';
+    protected $primaryKey = 'id';
 
     /**
      * Is the model readonly?
@@ -84,7 +93,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
     /**
      * The loaded relationships for the model.
      */
-    protected array $relations = [];
+    protected $relations = [];
 
     /**
      * Some of the responses have the collections under a property
@@ -134,7 +143,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
     /**
      * Dynamically retrieve attributes on the model.
      */
-    public function __get(string $key)
+    public function __get($key)
     {
         return $this->getAttribute($key);
     }
@@ -142,7 +151,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
     /**
      * Determine if an attribute or relation exists on the model.
      */
-    public function __isset(string $key): bool
+    public function __isset($key): bool
     {
         return $this->offsetExists($key);
     }
@@ -219,7 +228,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @throws ModelNotFoundException
      * @throws NoClientException
      */
-    public function belongsTo($related, $foreignKey = null): BelongsTo
+    public function belongsTo($related, $foreignKey = null, $ownerKey = null, $relation = null): BelongsTo
     {
         $foreignKey = $foreignKey ?? $this->assumeForeignKey($related);
 
@@ -450,7 +459,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @throws ModelNotFoundException
      * @throws NoClientException
      */
-    public function hasMany($related): HasMany
+    public function hasMany($related, $foreignKey = null, $localKey = null): HasMany
     {
         $builder = (new Builder())->setClass($related)
                                   ->setClient($this->getClient())
@@ -481,7 +490,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @param  array  $attributes
      * @return static
      */
-    public function newFromBuilder($attributes = []): self
+    public function newFromBuilder($attributes = [], $connection = null): self
     {
         $model = $this->newInstance([], true);
 
@@ -499,7 +508,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @param  bool  $exists
      * @return static
      */
-    public function newInstance(array $attributes = [], $exists = false): self
+    public function newInstance($attributes = [], $exists = false): self
     {
         $model = (new static($attributes, $this->parentModel))->setClient($this->client);
 
@@ -575,7 +584,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @throws NoClientException
      * @throws TokenException
      */
-    public function save(): bool
+    public function save(array $options = []): bool
     {
         // TODO: Make sure that the model supports being saved
         if ($this->readonlyModel) {
@@ -612,7 +621,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
             return true;
         } catch (GuzzleException $e) {
             // TODO: Do something with the error
-
+            \Log::error($e->getMessage());
             return false;
         }
     }
@@ -624,7 +633,7 @@ abstract class Model implements Arrayable, ArrayAccess, Jsonable, JsonSerializab
      * @throws TokenException
      * @throws UnableToSaveException
      */
-    public function saveOrFail(): bool
+    public function saveOrFail(array $options = []): bool
     {
         if (! $this->save()) {
             throw new UnableToSaveException();
